@@ -17,6 +17,7 @@ class Game:
     card_spacing = 20
     hidden_round = False
     cards_placed = 0
+    last_round_winner = None
 
     def __init__(self, players: list[Player]):
         """
@@ -166,16 +167,23 @@ class Game:
             if player.uuid == highest_card_player:
                 player.add_to_graveyard(cards_on_board)
                 print(f"{player.name} won the round")
-                self.draw_round_winner(player.name)
+                self.last_round_winner = player.name
                 break
 
         self.board = []
+
+
 
     def draw_round_winner(self, winner: str):
         """
         Displays the winner of the round
         """
-        self.draw_text(f"{winner} won the round", 50, (255, 255, 255))
+        if winner is not None:
+            font = pygame.font.Font("freesansbold.ttf", 32)
+            winner_text = font.render(f"{winner} won the previous round", True, (255, 255, 255))
+            # Place the text at the center of the screen, below the cards
+            winner_text_rect = winner_text.get_rect( center=(self.max_width // 2, self.max_height // 2 + self.card_image_height))
+            self.screen.blit(winner_text, winner_text_rect)
 
     def play_round(self, hidden_round: bool = False):
         """
@@ -191,7 +199,7 @@ class Game:
             return
 
         self.place_cards(hidden_round)
-
+        self.total_rounds += 1
         if hidden_round:
             print("Placing cards face up")
             return False
@@ -202,21 +210,6 @@ class Game:
                 return True
 
         return False
-
-    def play_game(self):
-        """
-        Play the game until there is a winner
-        """
-        while True:
-            self.play_round()
-            if self.is_game_over():
-                print("Game over")
-                for player in self.players_with_cards():
-                    print(f"{player.name} has {len(player.hand)} cards left in hand")
-                    print(
-                        f"{player.name} has {len(player.graveyard)} cards left in hand"
-                    )
-                break
 
     def init_load_cards(self):
         for suit in Deck.suits:
@@ -294,15 +287,20 @@ class Game:
 
         # Draw names above the cards
         for i, player in enumerate(self.players_with_cards()):
-            player_name = font.render(player.name, True, (0, 0, 0))
+            player_name = font.render(player.name, True, (255, 255, 255))
             player_name_rect = player_name.get_rect(center=(start_x + i * (self.card_image_width + self.card_spacing) + self.card_image_width // 2, start_y - 30))
             self.screen.blit(player_name, player_name_rect)
+        
+        # Draw total rounds played
+        total_rounds_text = font.render(f"Total Rounds: {self.total_rounds}", True, (255, 255, 255))
+        total_rounds_text_rect = total_rounds_text.get_rect(center=(total_rounds_text.get_width() // 2 + self.card_spacing, total_rounds_text.get_height() // 2 + self.card_spacing))
+        self.screen.blit(total_rounds_text, total_rounds_text_rect)
         return button_listeners
 
     def handle_button_click(self, listener: dict):
         if listener["button_name"] == "Draw Card":
-            self.hidden_round = self.play_round(self.hidden_round)
             self.winner_collect_cards()
+            self.hidden_round = self.play_round(self.hidden_round)
         elif listener["button_name"] == "Quit Game":
             pygame.event.post(pygame.event.Event(pygame.QUIT))
 
@@ -331,7 +329,7 @@ class Game:
 
         if player_count == 0:
             return
-
+        # Render cards from board
         for i in range(len(self.board)):
             x = start_x + (i % player_count) * (self.card_image_width + self.card_spacing)
             y = start_y
@@ -342,9 +340,30 @@ class Game:
                 card: Card = item["card"]
                 value, suit = card.get_value_and_suit()
                 self.screen.blit(self.card_images[(value.lower(), suit.lower())], (x, y))
-
-
-
+        
+        # Render players cards if they have any
+        for player in self.players_with_cards():
+            if len(player.graveyard) + len(player.hand) != 0:
+                player_index = self.players_with_cards().index(player)
+                x = start_x + (player_index % player_count) * (self.card_image_width + self.card_spacing)
+                y = self.card_spacing
+                
+                font = pygame.font.Font("freesansbold.ttf", 32)
+                total_card_text = font.render(f"{str(len(player.graveyard) + len(player.hand))} cards", True, (255, 255, 255))
+                total_card_name = font.render(f"{player.name}", True, (255, 255, 255))
+                total_card_name_rect = total_card_name.get_rect(center=(x + self.card_image_width // 2, y + self.card_image_height + self.card_spacing))
+                total_card_rect = total_card_text.get_rect(center=(x + self.card_image_width // 2, y + self.card_image_height + self.card_spacing + total_card_name_rect.height))
+                self.screen.blit(self.card_images[("hidden", "hidden")], (x, y))
+                self.screen.blit(total_card_text, total_card_rect)
+                self.screen.blit(total_card_name, total_card_name_rect)
+                
+    def draw_game_winner(self, winner: str):
+        if winner != None:
+            font = pygame.font.Font("freesansbold.ttf", 32)
+            text = font.render(f"{winner} won the game!", True, (255, 255, 255))
+            text_rect = text.get_rect(center=(self.max_width // 2, self.max_height // 2))
+            self.screen.blit(text, text_rect)
+        
 
     def start_pygame(self):
         running = True
@@ -353,6 +372,11 @@ class Game:
             button_listeners = self.draw_static_elements()
             button_clicked = self.handle_button_listeners(button_listeners, button_clicked)
             self.render_cards()
+            self.draw_round_winner(self.last_round_winner)
+            if self.is_game_over():
+                winner = self.get_game_winner()
+                self.draw_game_winner(winner)
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -361,27 +385,4 @@ class Game:
             pygame.display.update()
 
 
-new_game = Game([Player("Rasmus"), Player("Liza")])
-
-
-# # Game loop
-# card_spacing = 10
-# Card_Game = Game([Player("Rasmus"), Player("Liza")])
-# while True:
-#     for event in pygame.event.get():
-#         if event.type == pygame.QUIT:
-#             pygame.quit()
-#             sys.exit()
-
-#     x = 0
-#     y = 0
-#     for item in Card_Game.board:
-#         card = item["card"]
-#         value, suit = card.value.lower(), card.suit.lower()
-#         card_image = card_images[(value, suit)]
-#         screen.blit(card_image, (x, y))
-#         x += card_image_width + card_spacing
-#         if x + card_image_width > screen.get_width():
-#             x = 0
-#             y += card_image_height + card_spacing
-#     pygame.display.update()
+new_game = Game([Player("Nicole"), Player("Saharok")])
